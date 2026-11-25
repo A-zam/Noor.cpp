@@ -1,0 +1,3 @@
+1|admin|251803100|Aziza Karimova|director
+2|manager|873392302|Bobur Yusupov|manager
+3|teacher|478681882|Malika Rakhimova|teacher
