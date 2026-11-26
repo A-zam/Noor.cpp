@@ -9,6 +9,10 @@
 #include "accounts.h"
 #include "students.h"
 #include "attendance.h"
+#include "alerts.h"
+#include "daily.h"
+#include "reports.h"
+#include "table.h"
 
 // ---------- input helpers ----------
 
@@ -61,10 +65,6 @@ static std::string getToday() {
     return std::string(buffer);
 }
 
-static void notBuilt(const std::string& name, int stage) {
-    std::cout << name << " is not built yet (it comes in stage " << stage << ").\n";
-}
-
 // ---------- screens shared by the menus ----------
 
 static void showInbox(Database& db, const Account& me) {
@@ -73,22 +73,29 @@ static void showInbox(Database& db, const Account& me) {
         std::cout << "Your inbox is empty.\n";
         return;
     }
-    std::cout << "--- Inbox (" << inbox.size() << " messages) ---\n";
+    std::vector<std::vector<std::string>> rows;
     for (size_t i = 0; i < inbox.size(); i++) {
-        std::cout << (inbox[i].read ? "      " : "[NEW] ")
-                  << inbox[i].date << "  " << inbox[i].text << "\n";
+        std::vector<std::string> row;
+        row.push_back(inbox[i].read ? "" : "NEW");
+        row.push_back(inbox[i].date);
+        row.push_back(inbox[i].text);
+        rows.push_back(row);
     }
+    std::cout << "--- Inbox ---\n"
+              << formatTable({"", "Date", "Message"}, rows);
     if (!markInboxRead(db, me.id)) {
         std::cout << "Error: could not save messages.txt.\n";
     }
 }
 
 static void listAccounts(const Database& db) {
-    std::cout << "--- Accounts ---\n";
+    std::vector<std::vector<std::string>> rows;
     for (size_t i = 0; i < db.accounts.size(); i++) {
         const Account& a = db.accounts[i];
-        std::cout << a.id << ". " << a.fullName << " (" << a.username << ", " << a.role << ")\n";
+        rows.push_back({std::to_string(a.id), a.fullName, a.username, a.role});
     }
+    std::cout << "--- Accounts ---\n"
+              << formatTable({"ID", "Full name", "Username", "Role"}, rows, "r");
 }
 
 static void createAccountScreen(Database& db) {
@@ -127,29 +134,47 @@ static bool askInt(const std::string& question, int& value) {
     return true;
 }
 
-static void printStudent(const Database& db, const Student& s) {
-    std::cout << s.id << ". " << s.fullName << " | phone " << s.phone
-              << " | parent " << s.parentName << " " << s.parentPhone
-              << " | balance " << formatMoney(s.balance) << " UZS | groups: ";
-    if (s.groupIds.empty()) std::cout << "none";
-    for (size_t i = 0; i < s.groupIds.size(); i++) {
-        int gi = findGroupIndex(db, s.groupIds[i]);
-        if (i > 0) std::cout << ", ";
-        std::cout << (gi == -1 ? "?" : db.groups[gi].name);
+// Table of the students at these positions in db.students.
+static std::string studentsTable(const Database& db, const std::vector<int>& positions) {
+    std::vector<std::vector<std::string>> rows;
+    for (size_t i = 0; i < positions.size(); i++) {
+        const Student& s = db.students[positions[i]];
+        std::string groups = "";
+        for (size_t j = 0; j < s.groupIds.size(); j++) {
+            int gi = findGroupIndex(db, s.groupIds[j]);
+            if (j > 0) groups += ", ";
+            groups += (gi == -1 ? "?" : db.groups[gi].name);
+        }
+        rows.push_back({std::to_string(s.id), s.fullName, s.phone, s.parentName,
+                        s.parentPhone, formatMoney(s.balance), groups});
     }
-    std::cout << "\n";
+    return formatTable({"ID", "Name", "Phone", "Parent", "Parent phone", "Balance (UZS)", "Groups"},
+                       rows, "rllllrl");
 }
 
-static void printGroup(const Database& db, const Group& g) {
-    int ti = findAccountIndex(db, g.teacherId);
-    std::cout << g.id << ". " << g.name << " | teacher "
-              << (ti == -1 ? "?" : db.accounts[ti].fullName)
-              << " | " << formatMoney(g.pricePerLesson) << " UZS/lesson | days ";
-    for (size_t i = 0; i < g.days.size(); i++) {
-        if (i > 0) std::cout << ",";
-        std::cout << g.days[i];
+// Table of the groups at these positions in db.groups.
+static std::string groupsTable(const Database& db, const std::vector<int>& positions) {
+    std::vector<std::vector<std::string>> rows;
+    for (size_t i = 0; i < positions.size(); i++) {
+        const Group& g = db.groups[positions[i]];
+        int ti = findAccountIndex(db, g.teacherId);
+        std::string days = "";
+        for (size_t j = 0; j < g.days.size(); j++) {
+            if (j > 0) days += ",";
+            days += g.days[j];
+        }
+        rows.push_back({std::to_string(g.id), g.name, (ti == -1 ? "?" : db.accounts[ti].fullName),
+                        formatMoney(g.pricePerLesson), days, std::to_string(g.studentIds.size())});
     }
-    std::cout << " | " << g.studentIds.size() << " students\n";
+    return formatTable({"ID", "Group", "Teacher", "Price/lesson (UZS)", "Days", "Students"},
+                       rows, "rllrlr");
+}
+
+// Positions 0, 1, 2 ... count-1 (to show "all" students or groups).
+static std::vector<int> allPositions(size_t count) {
+    std::vector<int> positions;
+    for (size_t i = 0; i < count; i++) positions.push_back((int)i);
+    return positions;
 }
 
 static void addStudentScreen(Database& db) {
@@ -165,19 +190,19 @@ static void addStudentScreen(Database& db) {
 
 static void listStudentsScreen(const Database& db) {
     if (db.students.empty()) { std::cout << "No students yet.\n"; return; }
-    for (size_t i = 0; i < db.students.size(); i++) printStudent(db, db.students[i]);
+    std::cout << studentsTable(db, allPositions(db.students.size()));
 }
 
 static void searchStudentsScreen(const Database& db) {
     std::string text = readLine("Part of the name: ");
     std::vector<int> found = searchStudentsByName(db, text);
     if (found.empty()) { std::cout << "No student found.\n"; return; }
-    for (size_t i = 0; i < found.size(); i++) printStudent(db, db.students[found[i]]);
+    std::cout << studentsTable(db, found);
 }
 
 static void listGroupsScreen(const Database& db) {
     if (db.groups.empty()) { std::cout << "No groups yet.\n"; return; }
-    for (size_t i = 0; i < db.groups.size(); i++) printGroup(db, db.groups[i]);
+    std::cout << groupsTable(db, allPositions(db.groups.size()));
 }
 
 // enroll = true puts a student into a group, false takes the student out.
@@ -193,12 +218,13 @@ static void enrollScreen(Database& db, bool enroll) {
 }
 
 static void addGroupScreen(Database& db) {
-    std::cout << "Teachers:\n";
+    std::vector<std::vector<std::string>> teacherRows;
     for (size_t i = 0; i < db.accounts.size(); i++) {
         if (db.accounts[i].role == "teacher") {
-            std::cout << "  " << db.accounts[i].id << ". " << db.accounts[i].fullName << "\n";
+            teacherRows.push_back({std::to_string(db.accounts[i].id), db.accounts[i].fullName});
         }
     }
+    std::cout << "Teachers:\n" << formatTable({"ID", "Full name"}, teacherRows, "r");
     std::string name = readLine("Group name: ");
     int teacherId;
     if (!askInt("Teacher id: ", teacherId)) return;
@@ -219,11 +245,17 @@ static void showGroupStudentsScreen(const Database& db) {
     if (!askInt("Group id: ", groupId)) return;
     int gi = findGroupIndex(db, groupId);
     if (gi == -1) { std::cout << "Error: there is no group with that id.\n"; return; }
-    printGroup(db, db.groups[gi]);
+    std::vector<int> groupPosition;
+    groupPosition.push_back(gi);
+    std::cout << groupsTable(db, groupPosition);
+
+    std::vector<int> studentPositions;
     for (size_t i = 0; i < db.groups[gi].studentIds.size(); i++) {
         int si = findStudentIndex(db, db.groups[gi].studentIds[i]);
-        if (si != -1) printStudent(db, db.students[si]);
+        if (si != -1) studentPositions.push_back(si);
     }
+    if (studentPositions.empty()) std::cout << "This group has no students.\n";
+    else std::cout << studentsTable(db, studentPositions);
 }
 
 static void studentsMenu(Database& db) {
@@ -255,6 +287,10 @@ static void groupsMenu(Database& db) {
     }
 }
 
+static void printNewAlerts(int count) {
+    if (count > 0) std::cout << count << " new alert message(s) were sent to inboxes.\n";
+}
+
 static void paymentScreen(Database& db, const std::string& today) {
     int studentId;
     if (!askInt("Student id: ", studentId)) return;
@@ -271,7 +307,7 @@ static void paymentScreen(Database& db, const std::string& today) {
     if (recordPayment(db, studentId, amount, today, error)) {
         std::cout << "Payment saved. New balance: "
                   << formatMoney(db.students[si].balance) << " UZS\n";
-        // stage 4: the alert check (checkAlerts) will be called here
+        printNewAlerts(checkAlerts(db, today));
     } else {
         std::cout << "Error: " << error << "\n";
     }
@@ -280,8 +316,7 @@ static void paymentScreen(Database& db, const std::string& today) {
 static void attendanceScreen(Database& db, const Account& me, const std::string& today) {
     std::vector<int> visible = visibleGroupIndexes(db, me);
     if (visible.empty()) { std::cout << "There are no groups for you.\n"; return; }
-    std::cout << "--- Groups ---\n";
-    for (size_t i = 0; i < visible.size(); i++) printGroup(db, db.groups[visible[i]]);
+    std::cout << "--- Groups ---\n" << groupsTable(db, visible);
 
     int groupId;
     if (!askInt("Group id: ", groupId)) return;
@@ -314,10 +349,73 @@ static void attendanceScreen(Database& db, const Account& me, const std::string&
     if (markAttendance(db, me, groupId, today, presentIds, error)) {
         std::cout << "Attendance saved. Every student was charged "
                   << formatMoney(group.pricePerLesson) << " UZS.\n";
-        // stage 4: the alert check (checkAlerts) will be called here
+        printNewAlerts(checkAlerts(db, today));
     } else {
         std::cout << "Error: " << error << "\n";
     }
+}
+
+static void dailyScreen(const Database& db, const std::string& today) {
+    DailyList list = buildDailyList(db, today);
+    std::cout << "=== Daily action list: " << today << " (" << weekdayName(today) << ") ===\n";
+
+    std::cout << "\n1. Groups with a lesson today\n";
+    if (list.todayGroupIds.empty()) std::cout << "   none\n";
+    else {
+        std::vector<std::vector<std::string>> rows;
+        for (size_t i = 0; i < list.todayGroupIds.size(); i++) {
+            const Group& g = db.groups[findGroupIndex(db, list.todayGroupIds[i])];
+            rows.push_back({g.name, std::to_string(g.studentIds.size()),
+                            hasLesson(db, g.id, today) ? "saved" : "NOT marked yet"});
+        }
+        std::cout << formatTable({"Group", "Students", "Attendance"}, rows, "lr");
+    }
+
+    std::cout << "\n2. Call about money (lowest balance first)\n";
+    if (list.callList.empty()) std::cout << "   nobody\n";
+    else {
+        std::vector<std::vector<std::string>> rows;
+        for (size_t i = 0; i < list.callList.size(); i++) {
+            const Student& s = list.callList[i];
+            rows.push_back({s.fullName, formatMoney(s.balance), s.parentName, s.parentPhone});
+        }
+        std::cout << formatTable({"Student", "Balance (UZS)", "Call (parent)", "Phone"}, rows, "lrll");
+    }
+
+    std::cout << "\n3. Attendance warnings\n";
+    if (list.warnings.empty()) std::cout << "   none\n";
+    else {
+        std::vector<std::vector<std::string>> rows;
+        for (size_t i = 0; i < list.warnings.size(); i++) {
+            int si = findStudentIndex(db, list.warnings[i].studentId);
+            int gi = findGroupIndex(db, list.warnings[i].groupId);
+            rows.push_back({db.students[si].fullName, db.groups[gi].name, list.warnings[i].text});
+        }
+        std::cout << formatTable({"Student", "Group", "Warning"}, rows);
+    }
+}
+
+static void reportScreen(const Database& db) {
+    std::string month = readLine("Month (YYYY-MM): ");
+    MonthlyReport report;
+    std::string error;
+    if (!buildMonthlyReport(db, month, report, error)) {
+        std::cout << "Error: " << error << "\n";
+        return;
+    }
+    std::cout << "Revenue in " << month << ": " << formatMoney(report.revenue) << " UZS\n";
+    std::cout << "Total debt now: " << formatMoney(report.totalDebt) << " UZS\n";
+    std::vector<std::vector<std::string>> rows;
+    for (size_t i = 0; i < report.groups.size(); i++) {
+        const GroupAttendance& row = report.groups[i];
+        rows.push_back({row.groupName, std::to_string(row.lessons), std::to_string(row.present),
+                        std::to_string(row.absent),
+                        row.percent == -1 ? "n/a" : std::to_string(row.percent) + "%"});
+    }
+    std::cout << formatTable({"Group", "Lessons", "Present", "Absent", "Attendance"}, rows, "lrrrr");
+    std::string path;
+    if (saveMonthlyReport(report, path, error)) std::cout << "Report saved to " << path << "\n";
+    else std::cout << "Error: " << error << "\n";
 }
 
 // ---------- one menu per role ----------
@@ -345,8 +443,8 @@ static void directorMenu(Database& db, Account me, const std::string& today) {
         else if (choice == 4) groupsMenu(db);
         else if (choice == 5) paymentScreen(db, today);
         else if (choice == 6) attendanceScreen(db, me, today);
-        else if (choice == 7) notBuilt("Daily action list", 4);
-        else if (choice == 8) notBuilt("Monthly report", 4);
+        else if (choice == 7) dailyScreen(db, today);
+        else if (choice == 8) reportScreen(db);
         else if (choice == 9) showInbox(db, me);
         else if (choice != -1) std::cout << "Error: no such menu option.\n";
     }
@@ -369,8 +467,8 @@ static void managerMenu(Database& db, Account me, const std::string& today) {
         else if (choice == 2) groupsMenu(db);
         else if (choice == 3) paymentScreen(db, today);
         else if (choice == 4) attendanceScreen(db, me, today);
-        else if (choice == 5) notBuilt("Daily action list", 4);
-        else if (choice == 6) notBuilt("Monthly report", 4);
+        else if (choice == 5) dailyScreen(db, today);
+        else if (choice == 6) reportScreen(db);
         else if (choice == 7) showInbox(db, me);
         else if (choice != -1) std::cout << "Error: no such menu option.\n";
     }
