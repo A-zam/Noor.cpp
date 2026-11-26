@@ -9,6 +9,13 @@ void setDataFolder(const std::string& folder) {
     dataFolder = folder;
 }
 
+bool isSafeText(const std::string& text) {
+    for (size_t i = 0; i < text.size(); i++) {
+        if (text[i] == '|' || text[i] == '\n' || text[i] == '\r') return false;
+    }
+    return true;
+}
+
 // ---------- small helpers ----------
 
 // Cut a line at every separator. "a||b" gives {"a", "", "b"}.

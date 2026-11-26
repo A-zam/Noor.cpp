@@ -28,6 +28,11 @@ int nextId(const std::vector<Payment>& list);
 int nextId(const std::vector<Lesson>& list);
 int nextId(const std::vector<Message>& list);
 
+// Text is safe to store if it cannot break the file format:
+// no | (field separator) and no line breaks. Every module that saves
+// text typed by a user must check it with this first.
+bool isSafeText(const std::string& text);
+
 // Folder that holds the .txt files (default "data/"). Tests change it so
 // they do not touch the real data. Must end with "/".
 void setDataFolder(const std::string& folder);
