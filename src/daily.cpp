@@ -58,6 +58,7 @@ DailyList buildDailyList(const Database& db, const std::string& today) {
         const Group& group = db.groups[g];
         for (size_t i = 0; i < group.studentIds.size(); i++) {
             int studentId = group.studentIds[i];
+            if (findStudentIndex(db, studentId) == -1) continue;   // damaged data: skip, never crash
             if (hasAbsenceStreak(db, group.id, studentId)) {
                 Warning w;
                 w.studentId = studentId;
