@@ -9,6 +9,23 @@ void setDataFolder(const std::string& folder) {
     dataFolder = folder;
 }
 
+static std::string reportsFolder = "reports/";
+
+void setReportsFolder(const std::string& folder) {
+    reportsFolder = folder;
+}
+
+std::string getReportsFolder() {
+    return reportsFolder;
+}
+
+bool writeReportFile(const std::string& fileName, const std::string& content) {
+    std::ofstream file(reportsFolder + fileName);
+    if (!file.is_open()) return false;
+    file << content;
+    return true;
+}
+
 bool isSafeText(const std::string& text) {
     for (size_t i = 0; i < text.size(); i++) {
         if (text[i] == '|' || text[i] == '\n' || text[i] == '\r') return false;

@@ -33,6 +33,14 @@ int nextId(const std::vector<Message>& list);
 // text typed by a user must check it with this first.
 bool isSafeText(const std::string& text);
 
+// Write a text file (a CSV report) into the reports folder.
+// Returns false if the file cannot be written.
+bool writeReportFile(const std::string& fileName, const std::string& content);
+
+// Folder for report files (default "reports/"). Tests change it.
+void setReportsFolder(const std::string& folder);
+std::string getReportsFolder();
+
 // Folder that holds the .txt files (default "data/"). Tests change it so
 // they do not touch the real data. Must end with "/".
 void setDataFolder(const std::string& folder);

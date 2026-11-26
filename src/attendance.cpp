@@ -35,6 +35,47 @@ std::vector<Lesson> lessonsOfGroup(const Database& db, int groupId) {
     return result;
 }
 
+// The numbers from the brief, written once so they are easy to find and change.
+static const int STREAK_LENGTH = 2;            // absent from the last 2 lessons
+static const int MIN_LESSONS_FOR_PERCENT = 4;  // percent rule starts at 4 lessons
+static const int LOW_ATTENDANCE_PERCENT = 70;  // under 70% is low
+
+// Count in how many lessons the student was present and absent.
+static void countMarks(const std::vector<Lesson>& lessons, int studentId, int& present, int& absent) {
+    present = 0;
+    absent = 0;
+    for (size_t i = 0; i < lessons.size(); i++) {
+        if (contains(lessons[i].presentIds, studentId)) present++;
+        if (contains(lessons[i].absentIds, studentId)) absent++;
+    }
+}
+
+bool hasAbsenceStreak(const Database& db, int groupId, int studentId) {
+    std::vector<Lesson> lessons = lessonsOfGroup(db, groupId);
+    if ((int)lessons.size() < STREAK_LENGTH) return false;
+    for (size_t i = lessons.size() - STREAK_LENGTH; i < lessons.size(); i++) {
+        if (!contains(lessons[i].absentIds, studentId)) return false;
+    }
+    return true;
+}
+
+int studentAttendancePercent(const Database& db, int groupId, int studentId) {
+    int present, absent;
+    countMarks(lessonsOfGroup(db, groupId), studentId, present, absent);
+    if (present + absent == 0) return -1;
+    return present * 100 / (present + absent);
+}
+
+bool hasLowAttendance(const Database& db, int groupId, int studentId) {
+    std::vector<Lesson> lessons = lessonsOfGroup(db, groupId);
+    if ((int)lessons.size() < MIN_LESSONS_FOR_PERCENT) return false;
+    int present, absent;
+    countMarks(lessons, studentId, present, absent);
+    if (present + absent == 0) return false;
+    // present/total < 70/100, written with whole numbers so there is no rounding
+    return present * 100 < LOW_ATTENDANCE_PERCENT * (present + absent);
+}
+
 bool markAttendance(Database& db, const Account& by, int groupId, const std::string& date,
                     const std::vector<int>& presentIds, std::string& error) {
     int gi = findGroupIndex(db, groupId);
