@@ -52,10 +52,10 @@ Money = `long long` UZS. Dates = `YYYY-MM-DD`. New id = max id + 1. Load everyth
 | # | Stage | Status |
 |---|---|---|
 | 1 | structs.h, storage.h/.cpp, sample data | DONE |
-| 2 | accounts + role-based menu in main.cpp | todo |
-| 3 | students and attendance | todo |
-| 4 | alerts, daily list, monthly report | todo |
-| 5 | test.cpp with plain asserts | todo |
+| 2 | accounts + role-based menu in main.cpp | DONE |
+| 3 | students, groups, payments and attendance | DONE (see CODE_WALKTHROUGH.md parts 6-8) |
+| 4 | alerts, daily list, monthly report | DONE (see CODE_WALKTHROUGH.md parts 9-13) |
+| 5 | tests/test.cpp with plain asserts (24 tests) | DONE (see CODE_WALKTHROUGH.md part 15) |
 
 Stage 5 tests: balance deduction, each alert at its threshold, no duplicate alerts, report totals, save-then-load returns the same data.
 
@@ -120,15 +120,104 @@ Saving does the reverse: loop over the vector, write each field with `|` between
 
 ---
 
-## 4. File map (so far)
+## 4. Stage 2 explained (for the presentation)
+
+### What was added
+- `accounts.h/.cpp`: password hash, login, creating accounts, and the inbox helpers (count unread, list, mark read).
+- `main.cpp` (real version): login, three role menus, input helpers.
+- `storage.cpp` got one small function, `isSafeText`.
+
+### The flow of the program
 ```
-src/structs.h     all structs + Database
-src/storage.h     public storage functions
-src/storage.cpp   load, save, split helpers, nextId
-src/main.cpp      TEMPORARY: just prints record counts (replaced in stage 2)
-data/*.txt        sample data (6 files)
-reports/          CSV output (stage 4)
-docs/             this file + screenshots
+start -> loadAll -> show today's date -> login (3 tries) -> role menu loop -> logout -> end
 ```
+1. `main` loads all data, then asks for username and password.
+2. `login(db, username, password)` hashes the typed password and compares it with every account's stored hash. It returns the account's position in the vector, or -1 if nothing matches. It never prints anything: main decides what to show.
+3. On success main copies the account (`Account me = db.accounts[index]`), greets the user and prints the unread count (`countUnread`).
+4. Depending on `me.role`, main calls `directorMenu`, `managerMenu` or `teacherMenu`. Each is a `while (true)` loop that prints ONLY that role's options, reads a number and runs the matching action. Option 0 does `return`, which ends the loop and logs out.
+
+### The password hash (hashPassword)
+```
+h = 5381
+for each character c in the password:
+    h = (h * 33 + c) % 1000000007
+```
+It turns the password into one number. The same password always gives the same number, so we can compare numbers without storing the real password. `% 1000000007` keeps the number from growing too big for `long long`. This is the "djb2" teaching hash: fine for a course project, NOT secure for real systems (real systems use bcrypt or similar with a random salt). Say this honestly in the defense.
+
+### Input handling (the "never crash" rule)
+- `readLine` reads a WHOLE line with `getline`. We never use `cin >> number`, because typing letters there breaks `cin` and can loop forever.
+- `parseInt` checks character by character that the text is only digits (with an optional leading minus), so "abc", "" or "12x" are rejected before any conversion. It also rejects numbers longer than 9 digits so `stoi` cannot overflow.
+- `readChoice` uses both. If it returns -1 the menu prints an error and shows the menu again. The menu code treats -1 as "error already shown, just loop".
+- If the input stream ends (Ctrl+Z), `readLine` exits cleanly instead of looping forever.
+
+### Why `Account me` is passed BY COPY to the menus
+`createAccount` does `push_back` on `db.accounts`. When a vector grows it may move to new memory, and any reference or pointer to its old elements would then point at garbage. So the menus get a copy of the logged-in account that stays valid.
+
+### createAccount (validation = a list of early returns)
+Each rule is an `if (...) { error = "..."; return false; }`: empty username, spaces, `|` character, empty name, password shorter than 4, bad role, duplicate username. Only if every check passes does it build the Account (id = `nextId`), add it and save. If saving fails it does `pop_back()` so memory and file never disagree. The error text goes out through the `error` parameter (a reference), which is how a function returns TWO things (success/fail and a reason) without printing.
+
+### isSafeText (why it exists)
+Our file format uses `|` as the field separator. If someone typed `A|B` as a name, the line would split into the wrong number of fields and the record would be skipped on the next load. So every module that saves typed text calls `isSafeText` first. It lives in storage because it protects the file format.
+
+### Why logic functions don't print
+`login`, `createAccount`, `countUnread` return values only. Only main prints. A later web page can call the same functions and show the result as HTML.
+
+### The date
+`getToday()` in main reads the clock ONCE (`time`, `localtime`, `strftime` format `%Y-%m-%d`) and the string is passed down. Tests can pass fixed dates like "2026-11-25" instead.
+
+### What the menus show (role-based)
+| Role | Options |
+|---|---|
+| director | create account, list accounts, students, groups, payment, attendance, daily list, monthly report, inbox |
+| manager | students, groups, payment, attendance, daily list, monthly report, inbox |
+| teacher | mark attendance (own groups), inbox |
+
+Options for stages 3 and 4 print "not built yet" for now. Viewing the inbox marks everything read, which matters for the "skip duplicate unread alert" rule in stage 4.
+
+### Questions the examiner may ask
+- **Why hash passwords?** So accounts.txt never holds the real password. Our hash is weak on purpose (simple); real systems use salted bcrypt.
+- **Why getline and not cin >>?** `cin >>` breaks on letters when it expects a number. getline always succeeds, and we validate the text ourselves.
+- **How does a teacher not see the director menu?** The menu function is chosen by `me.role`, and each menu only prints its own options.
+- **What stops a wrong account being created?** `createAccount` validation list; nothing is saved unless all checks pass.
+- **Why return -1 from login?** Array positions are 0 or more, so -1 can never be a real position: it safely means "not found".
+
+---
+
+## 5. File map
+```
+src/structs.h        all structs + Database
+src/storage.*        load, save, split helpers, nextId, isSafeText, report file writer
+src/accounts.*       password hash, login, createAccount, inbox helpers
+src/students.*       students, groups, enroll, search, payments, formatMoney, isValidDate
+src/attendance.*     markAttendance (charges), streak and percentage rules
+src/alerts.*         the four alert rules, checkAlerts
+src/daily.*          weekday, selection sort, daily action list
+src/reports.*        monthly report numbers and CSV
+src/table.*          formatTable (aligned text tables)
+src/main.cpp         input helpers, screens, role menus, main() (only file with cin/cout)
+tests/test.cpp       plain-assert tests;  tests/run_tests.bat builds and runs them
+data/*.txt           sample data (6 files)
+reports/             CSV output
+docs/                notes + screenshots
+```
+
+## 6. Who explains what (defense)
+Each of us explains our own files and the screens in main.cpp that call them, plus the tests for them. Everyone should still be able to follow the whole program (read CODE_WALKTHROUGH.md).
+
+| Person | Files | Screens / functions in main.cpp | Tests |
+|---|---|---|---|
+| A'zam | structs.h, storage.*, alerts.* | input helpers (`readLine`, `parseInt`, `parseLong`, `getToday`, `askInt`, `readChoice`), the 3 role menus, `main()` | storage (3), alerts (5) |
+| Azizbek | students.*, attendance.* | students and groups menus and screens, payment screen, attendance screen, `studentsTable`, `groupsTable`, `printNewAlerts` | students (5), attendance (2) |
+| Quvonchbek | accounts.*, daily.*, reports.*, table.* | inbox, accounts list, create account, daily list, report screens | accounts (3), daily (3), reports (2), table (1) |
+
+Study guides: `PART_Azam.md`, `PART_Azizbek.md`, `PART_Quvonchbek.md`. The full line-by-line explanation of everything is `CODE_WALKTHROUGH.md`.
+
+## 7. Run and test
+```
+g++ -std=c++17 src/*.cpp -o learnoor        (program, run from the project root)
+.\learnoor.exe
+tests\run_tests.bat                          (all tests)
+```
+Logins: admin/admin123 (director), manager/manager123, teacher/teacher123. The program edits data/*.txt; `git restore data/` brings the sample data back.
 
 *Update this file after every stage: tick the status table, add a "Stage N explained" section, add new exam questions.*
