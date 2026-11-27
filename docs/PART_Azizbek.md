@@ -38,7 +38,7 @@ Functions that CREATE something return the new id, or **0 for failure** (real id
 ## 4. attendance.cpp, function by function
 - `visibleGroupIndexes(db, who)`: `if (who.role != "teacher" || group.teacherId == who.id)` include the group. That one line is "teachers see only their own groups".
 - `hasLesson(db, groupId, date)`: was this group already marked that day (prevents double charging).
-- `lessonsOfGroup`: that group's lessons in saved order (oldest first).
+- `lessonsOfGroup`: that group's lessons, sorted oldest DATE first by an insertion sort (so a lesson saved late for an earlier day still counts in calendar order; test in `testAbsenceStreak`).
 - `markAttendance(db, by, groupId, date, presentIds, error)` - **the money logic**. Checks in order: group exists; **if `by` is a teacher the group must be his** (a second safety check inside the logic, so even a buggy menu cannot break the rule); valid date; group has students; not already marked; every present id belongs to the group. Then every student of the group goes into `presentIds` or `absentIds` (so the caller only says who is PRESENT; nobody is forgotten), the lesson is added, and **every student of the group is charged `pricePerLesson` whether present or absent** (rule: "paid no matter the attendance"). Balance may become negative = debt. Save lessons + students; undo everything if saving fails.
 - Constants at the top: `STREAK_LENGTH = 2`, `MIN_LESSONS_FOR_PERCENT = 4`, `LOW_ATTENDANCE_PERCENT = 70`.
 - `countMarks(lessons, studentId, present, absent)` (private): counts presents/absents of one student, results through reference parameters.

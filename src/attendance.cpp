@@ -32,6 +32,19 @@ std::vector<Lesson> lessonsOfGroup(const Database& db, int groupId) {
     for (size_t i = 0; i < db.lessons.size(); i++) {
         if (db.lessons[i].groupId == groupId) result.push_back(db.lessons[i]);
     }
+    // Oldest date first. A lesson saved late (for an earlier day) must still count in calendar order,
+    // because "the last 2 lessons" means the two newest DATES, not the two last saved.
+    // Insertion sort: take each lesson and slide it left while the one before it is newer.
+    // (YYYY-MM-DD dates compare correctly as plain text.)
+    for (size_t i = 1; i < result.size(); i++) {
+        Lesson current = result[i];
+        size_t j = i;
+        while (j > 0 && result[j - 1].date > current.date) {
+            result[j] = result[j - 1];
+            j--;
+        }
+        result[j] = current;
+    }
     return result;
 }
 

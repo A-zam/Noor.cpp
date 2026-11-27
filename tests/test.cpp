@@ -524,6 +524,16 @@ static void testAbsenceStreak() {
     addStudentTo(one, 30, 1000000, 1);
     addLessonTo(one, 1, "2026-10-01", {}, {30});
     assert(!hasAbsenceStreak(one, 1, 30));
+
+    // "The last 2 lessons" means the two newest DATES, even if an older day was saved late.
+    Database late = baseDb();
+    addGroupTo(late, 1, 3, 100000, "Mon");
+    addStudentTo(late, 31, 1000000, 1);
+    addLessonTo(late, 1, "2026-10-05", {}, {31});
+    addLessonTo(late, 1, "2026-10-06", {}, {31});
+    addLessonTo(late, 1, "2026-10-01", {31}, {});             // saved last, but it is the OLDEST day
+    assert(hasAbsenceStreak(late, 1, 31));
+    assert(lessonsOfGroup(late, 1)[0].date == "2026-10-01"); // lessons come back oldest date first
 }
 
 static std::string dayOfOctober(int i) {

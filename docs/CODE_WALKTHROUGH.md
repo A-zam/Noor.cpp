@@ -366,7 +366,7 @@ if (who.role != "teacher" || db.groups[i].teacherId == who.id) result.push_back(
 Read it as: "include this group if the person is NOT a teacher (manager/director see all) OR the group's teacher is this person". This ONE line is what implements "teachers only see their own groups".
 
 ### hasLesson / lessonsOfGroup
-Plain loops. `hasLesson` answers "was this group already marked on this date?" so a lesson cannot be saved (and charged) twice in a day. `lessonsOfGroup` copies a group's lessons in saved order; stage 4's alerts need it.
+Plain loops. `hasLesson` answers "was this group already marked on this date?" so a lesson cannot be saved (and charged) twice in a day. `lessonsOfGroup` copies a group's lessons and then sorts the copy **oldest date first** with a small insertion sort (take each lesson, slide it left while the one before it has a later date; `YYYY-MM-DD` dates compare correctly as plain text). Sorting matters because a lesson can be saved late for an earlier day: "the last 2 lessons" must mean the two newest DATES, not the two last saved. The alert rules and the web history use this function.
 
 ### markAttendance - the core of the money logic
 Checks in this order: group exists; if the user is a teacher the group must be theirs (a SECOND safety check, in the logic itself, so even a buggy menu cannot let a teacher into another teacher's group); date valid; group has students; not already marked; every id in `presentIds` really belongs to the group.
@@ -417,7 +417,7 @@ Loops over lessons and counts how many times the student is in `presentIds` and 
 
 ### hasAbsenceStreak(db, groupId, studentId)
 ```cpp
-lessons = lessonsOfGroup(db, groupId);              // oldest first
+lessons = lessonsOfGroup(db, groupId);              // oldest DATE first (sorted inside)
 if (lessons.size() < 2) return false;               // not enough lessons yet
 for (i = lessons.size() - 2; i < lessons.size(); i++)   // only the LAST 2 lessons
     if (!contains(lessons[i].absentIds, studentId)) return false;
