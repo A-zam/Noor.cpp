@@ -3,3 +3,7 @@ learnoor.exe
 test
 test.exe
 tests/tmp/
+.gstack/
+
+web/engine/engine.exe
+web/engine/engine

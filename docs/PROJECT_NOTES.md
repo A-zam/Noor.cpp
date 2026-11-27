@@ -56,6 +56,7 @@ Money = `long long` UZS. Dates = `YYYY-MM-DD`. New id = max id + 1. Load everyth
 | 3 | students, groups, payments and attendance | DONE (see CODE_WALKTHROUGH.md parts 6-8) |
 | 4 | alerts, daily list, monthly report | DONE (see CODE_WALKTHROUGH.md parts 9-13) |
 | 5 | tests/test.cpp with plain asserts (24 tests) | DONE (see CODE_WALKTHROUGH.md part 15) |
+| 6 | web interface in `web/` (Node server + HTML/CSS/JS pages + small C++ bridge) | DONE (see WEB_GUIDE.md) |
 
 Stage 5 tests: balance deduction, each alert at its threshold, no duplicate alerts, report totals, save-then-load returns the same data.
 
@@ -199,6 +200,10 @@ tests/test.cpp       plain-assert tests;  tests/run_tests.bat builds and runs th
 data/*.txt           sample data (6 files)
 reports/             CSV output
 docs/                notes + screenshots
+web/engine/api.cpp   C++ bridge: one command in, JSON out, calls the same modules
+web/server.js        Node server: sessions, passes requests to engine.exe
+web/public/          the pages: index.html, app.js, style.css, logo, fonts
+web/run_web.bat      builds the engine and starts the server
 ```
 
 ## 6. Who explains what (defense)
@@ -210,6 +215,8 @@ Each of us explains our own files and the screens in main.cpp that call them, pl
 | Azizbek | students.*, attendance.* | students and groups menus and screens, payment screen, attendance screen, `studentsTable`, `groupsTable`, `printNewAlerts` | students (5), attendance (2) |
 | Quvonchbek | accounts.*, daily.*, reports.*, table.* | inbox, accounts list, create account, daily list, report screens | accounts (3), daily (3), reports (2), table (1) |
 
+The web layer (`web/`) is explained in `WEB_GUIDE.md`; everyone should know its one-paragraph architecture (section 1 of that file). Agree in the team who presents which of `api.cpp`, `server.js`, `app.js`.
+
 Study guides: `PART_Azam.md`, `PART_Azizbek.md`, `PART_Quvonchbek.md`. The full line-by-line explanation of everything is `CODE_WALKTHROUGH.md`.
 
 ## 7. Run and test
@@ -217,6 +224,7 @@ Study guides: `PART_Azam.md`, `PART_Azizbek.md`, `PART_Quvonchbek.md`. The full 
 g++ -std=c++17 src/*.cpp -o learnoor        (program, run from the project root)
 .\learnoor.exe
 tests\run_tests.bat                          (all tests)
+web\run_web.bat                              (web version: builds the engine, starts the server on http://localhost:3000)
 ```
 Logins: admin/admin123 (director), manager/manager123, teacher/teacher123. The program edits data/*.txt; `git restore data/` brings the sample data back.
 
